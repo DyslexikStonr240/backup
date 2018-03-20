@@ -1,0 +1,221 @@
+
+void                            LinearLossFunc(Eigen::MatrixXd& train_images, Eigen::VectorXd& train_labels, Eigen::MatrixXd& weights, Eigen::MatrixXd& score, Eigen::MatrixXd& gradient, Eigen::VectorXd& loss);
+void                            TwoLayerLossFunc(Eigen::MatrixXd& train_images, Eigen::VectorXd& train_labels, Eigen::MatrixXd& weights1, Eigen::MatrixXd& weights2, double STEP_SIZE);
+
+
+
+
+void    Classifier::LinearLossFunc(Eigen::MatrixXd& train_images, Eigen::VectorXd& train_labels, Eigen::MatrixXd& weights, Eigen::MatrixXd& score, Eigen::MatrixXd& gradient, Eigen::VectorXd& loss){
+
+   double Delta = 1.0f;
+   double Lambda = 100.0f;
+   double Regularisation = 0.0f;
+
+   score = weights * train_images;
+   score.transposeInPlace();
+   loss = Eigen::VectorXd(train_images.cols(), 1);
+   gradient = Eigen::MatrixXd::Zero(score.rows(), 10);
+
+   for(int i = 0; i < weights.rows(); i++){
+       for(int j = 0; j < weights.cols(); j++){
+
+           Regularisation += (weights(i * weights.cols() + j)) * (weights(i * weights.cols() + j));
+       }
+   }
+
+   for(int i = 0; i < score.rows(); i++){
+
+       double tmp = 0;
+       int correct_class = static_cast<int>(train_labels(i));
+       for(int j = 0; j < score.cols(); j++){
+
+           double CHECK = 0;
+           if(j != correct_class){
+
+               CHECK = std::max((double)0, score(i, j) - score(i, correct_class) + Delta) - ((1 / score.rows()) * Lambda * Regularisation);
+               tmp += CHECK;
+               if(CHECK > 0){
+
+                   gradient(i, correct_class)--;
+                   gradient(i, j)++;
+               }else{}
+           }else{}
+       }
+
+       loss(i) = tmp;
+   }
+
+   gradient = train_images * gradient;
+   gradient.transposeInPlace();
+   weights -= 0.1 * gradient;
+
+}
+
+void    Classifier::TwoLayerLossFunc(Eigen::MatrixXd& train_images, Eigen::VectorXd& train_labels, Eigen::MatrixXd& weights1, Eigen::MatrixXd& weights2, double STEP_SIZE){
+
+    double Delta = 1.0f;
+    double Regularisation = 0.0f;
+    double Lambda = 0.2f;
+
+    for(int i = 0; i < weights2.rows(); i++){
+        for(int j = 0; j < weights2.cols(); j++){
+
+            Regularisation += (weights2(i, j)) * (weights2(i, j));
+        }
+    }
+
+
+
+    Eigen::MatrixXd score1 = weights1 * train_images;//a x k . k x i = a x i
+    score1.transposeInPlace();//i x a
+
+    Eigen::MatrixXd boolMax = Eigen::MatrixXd::Zero(score1.rows(), score1.cols());//i x a
+    Eigen::MatrixXd scoreTmp(score1.rows(), score1.cols());//i x a
+    Eigen::MatrixXd score2(score1.rows(), score1.cols());//i x a
+
+    for(int i = 0; i < score1.rows(); i++){
+
+        for(int j = 0; j < score1.cols();j++){
+
+        double CHECK = std::max((double)0, score1(i, j));
+        scoreTmp(i, j) = CHECK;
+        if(CHECK > 0){
+
+            boolMax(i,j) = 1;
+        }else{}
+
+        }
+    }
+
+    score2 = scoreTmp;//i x a
+    scoreTmp.transposeInPlace();//a x i
+    scoreTmp = weights2 * scoreTmp;//10 x i
+    scoreTmp.transposeInPlace();//i x 10
+    Eigen::MatrixXd gradients = Eigen::MatrixXd::Zero(scoreTmp.rows(), scoreTmp.cols());//i x 10
+    Eigen::MatrixXd gradientsW1 = Eigen::MatrixXd::Zero(scoreTmp.rows(), scoreTmp.cols());//i x 10
+    Eigen::MatrixXd gradientsW2 = Eigen::MatrixXd::Zero(scoreTmp.rows(), scoreTmp.cols());//i x 10
+
+    for(int i = 0; i < scoreTmp.rows(); i++){
+
+        int correct_class = static_cast<int>(train_labels(i));
+        for(int j = 0; j < scoreTmp.cols(); j++){
+
+            double CHECK = 0;
+            if(j != correct_class){
+
+                CHECK = std::max((double)0, scoreTmp(i, j) - scoreTmp(i, correct_class) + Delta + Lambda * Regularisation);
+                if(CHECK > 0){
+
+                    gradients(i, correct_class)--;
+                    gradients(i, j)++;
+                }else{}
+            }else{}
+        }
+    }
+    gradientsW1 = gradients;//i x 10
+    gradientsW2 = gradients;//i x 10
+
+    gradientsW1 *= weights2;//i x a
+
+    for(int i = 0; i < gradientsW1.rows(); i++){
+        for(int j = 0; j < gradientsW1.cols(); j++){
+
+            if(boolMax(i,j) == 0){
+
+                gradientsW1(i,j) = 0;
+            }else{}
+        }
+    }
+    gradientsW1 = train_images * gradientsW1;
+    gradientsW1.transposeInPlace();
+
+    gradientsW2.transposeInPlace();//10 x i
+    gradientsW2 *= score2;
+
+    weights1 -= STEP_SIZE * gradientsW1;
+    weights2 -= STEP_SIZE * gradientsW2;
+
+
+}
+
+
+
+void    Classifier::LinearLossFunc(){
+
+    double Delta = 1.0f;
+    //double Lambda = 100.0f;
+    //double Regularisation = 0.0f;
+
+    Eigen::MatrixXd weights = Eigen::MatrixXd::Random(_trainImagesTest.cols() + 1, 10);
+    Eigen::MatrixXd score;
+    int BATCH_SIZE = 1000;
+
+    Eigen::MatrixXd tmpMat(_trainImages.rows(), _trainImages.cols() + 1);
+    tmpMat.block(0, 0, _trainImages.rows(), _trainImages.cols()) = _trainImages;
+    tmpMat.col( _trainImages.cols()) = Eigen::MatrixXd::Constant(_trainImages.rows(),1, 1);
+    Eigen::VectorXd tmpVec = _trainLabels;
+
+    for(int in = 0; in < 20; in++){
+    for(int jn = 0; jn < 50; jn++){
+
+    Eigen::MatrixXd tmpTrainImages = tmpMat.block(jn * BATCH_SIZE, 0, BATCH_SIZE, tmpMat.cols());
+    Eigen::VectorXd tmpTrainLabels = tmpVec.segment(jn * BATCH_SIZE, BATCH_SIZE);
+
+    score = tmpTrainImages * weights;
+    //score.transposeInPlace();
+    //loss = Eigen::VectorXd(train_images.cols(), 1);
+    Eigen::MatrixXd gradient = Eigen::MatrixXd::Zero(score.rows(), 10);
+
+    /*for(int i = 0; i < weights.rows(); i++){
+       for(int j = 0; j < weights.cols(); j++){
+
+           Regularisation += (weights(i * weights.cols() + j)) * (weights(i * weights.cols() + j));
+       }
+    }*/
+    float count = 0;
+    for(int i = 0; i < score.rows(); i++){
+
+        double tmp = 0;
+        int correct_class = static_cast<int>(tmpTrainLabels(i));
+
+        std::ptrdiff_t index;
+        Eigen::VectorXd tmpVec = score.row(i);
+        tmpVec.maxCoeff(&index);
+
+
+        if(tmpTrainLabels(i) == index){
+
+            count++;
+        }
+
+        //std::cout << std::endl << _weights.block(0, 0, 2, _weights.cols());
+        //std::cout << std::endl << count / score.rows() << std::endl;
+        for(int j = 0; j < score.cols(); j++){
+
+            double CHECK = 0;
+            if(j != correct_class){
+
+                CHECK = std::max((double)0, score(i, j) - score(i, correct_class) + Delta);
+                tmp += CHECK;
+                if(CHECK > 0){
+
+                    gradient(i, correct_class)--;
+                    gradient(i, j)++;
+                }else{}
+            }else{}
+        }
+
+        //loss(i) = tmp;
+        }
+    std::cout << count/BATCH_SIZE << "   ";
+
+    gradient = tmpTrainImages.transpose() * gradient;
+    //gradient.transposeInPlace();
+    weights -= 0.1 * gradient;
+
+    }
+
+}
+std::cout << std::endl;
+
+}
